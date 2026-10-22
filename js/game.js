@@ -21,6 +21,10 @@ const SAVE_KEY = 'banners-of-war.save.v1';
 
 const save = (() => { try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch { return {}; } })();
 save.ach = save.ach || {};
+save.scale = save.scale === 5 ? 5 : 1;
+// 출전 규모 배율: 일반 부대 병력에만 적용하고 적장(1명)은 그대로 둔다
+const SCALES = [1, 5];
+const scaled = (n) => n * save.scale;
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* 저장 불가 환경 */ } };
 
 // ================= 지형 =================
@@ -255,10 +259,10 @@ function startBattle(b) {
 }
 
 function addReg(d, side, isGeneral = false) {
-  const t = UNIT_TYPES[d.type];
+  const t = UNIT_TYPES[d.type], count = isGeneral ? d.count : scaled(d.count);
   const face = side ? (G.b.enemy.face ?? Math.PI) : (G.b.player.face || 0);
   const r = {
-    id: G.regId++, side, tk: d.type, type: t, name: d.name || t.name, units: [], init: d.count, alive: d.count,
+    id: G.regId++, side, tk: d.type, type: t, name: d.name || t.name, units: [], init: count, alive: count,
     morale: 100, routing: false, lt: !!d.lt, wait: d.wait || 0, formation: d.formation || 'rect',
     home: { x: d.x, y: d.y }, face, cx: d.x, cy: d.y, ax: d.x, ay: d.y, mode: 'idle', buffT: 0,
     isGeneral, dead: false, target: null, el: null,
@@ -266,8 +270,8 @@ function addReg(d, side, isGeneral = false) {
   };
   r.order = side === 0 && !d.lt ? { k: 'hold', x: d.x, y: d.y, face } : { k: 'auto' };
   const mul = side ? G.b.enemyMul : { hp: 1, atk: 1 };
-  const slots = formationSlots(d.count, d.x, d.y, face, r.formation, t.sp || 15);
-  for (let i = 0; i < d.count; i++) {
+  const slots = formationSlots(count, d.x, d.y, face, r.formation, t.sp || 15);
+  for (let i = 0; i < count; i++) {
     let [x, y] = slots[i];
     if (tAt(G.T, x, y) === T_WATER) { x = d.x + rand(-10, 10); y = d.y + rand(-10, 10); }
     const u = {
@@ -276,7 +280,7 @@ function addReg(d, side, isGeneral = false) {
     };
     r.units.push(u); G.units.push(u);
   }
-  G.regs.push(r); G.init[side] += d.count;
+  G.regs.push(r); G.init[side] += count;
   return r;
 }
 
@@ -536,7 +540,7 @@ function heroArc(rad, half, dmg, kb) {
     if (half < Math.PI && Math.abs(angDiff(h.face, Math.atan2(dy, dx))) > half) continue;
     const d = Math.sqrt(dd) || 1, v = dmg * h.atk * rand(0.9, 1.1);
     hurt(u, v, h, dx / d * kb, dy / d * kb);
-    if (++hits <= 5) floatText(u.x, u.y - 10, Math.round(v), '#ffe8a0');
+    if (++hits <= 5) { floatText(u.x, u.y - 10, Math.round(v), '#ffe8a0'); G.fx.push({ k: 'spark', x: u.x + rand(-3, 3), y: u.y - 10 + rand(-3, 3), t: 0, dur: 0.16 }); }
   }
   if (hits) G.shake = Math.max(G.shake, 2);
   return hits;
@@ -546,7 +550,7 @@ function swing() {
   h.combo = (s + 1) % 3; h.comboWin = 0.75; h.swingDur = h.swingT = s === 2 ? 0.34 : 0.24; h.swingDir = s === 1 ? -1 : 1;
   const rad = [64, 64, 80][s], half = [1.0, 1.0, 1.5][s];
   heroArc(rad, half, [42, 42, 80][s], [50, 50, 200][s]);
-  G.fx.push({ k: 'slash', x: h.x, y: h.y, a: h.face, r: rad, half, t: 0, dur: 0.2, big: s === 2 });
+  G.fx.push({ k: 'slash', x: h.x, y: h.y, a: h.face, r: rad, half, t: 0, dur: 0.22, big: s === 2, dir: h.swingDir });
 }
 function attackPress() {
   const h = G.hero;
@@ -559,7 +563,7 @@ function chargeRelease() {
   const h = G.hero; if (!h.charging) return;
   h.charging = false; const c = h.charge;
   heroArc(70 + 70 * c, Math.PI + 0.01, 60 + 170 * c, 120 + 200 * c);
-  G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 20, r1: 70 + 70 * c, t: 0, dur: 0.3, c: '255,220,140' });
+  G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 20, r1: 70 + 70 * c, t: 0, dur: 0.3, c: '#ffe08c', c2: '#e09040' });
   G.shake = Math.max(G.shake, 3 + 6 * c); h.swingT = h.swingDur = 0.3;
 }
 function dash() {
@@ -579,7 +583,7 @@ function slam() {
   const h = G.hero; if (busy(h) || h.cd.e > 0) return;
   h.cd.e = 8; h.charging = false;
   heroArc(125, Math.PI + 0.01, 105, 230);
-  G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 10, r1: 130, t: 0, dur: 0.35, c: '230,200,150' });
+  G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 10, r1: 130, t: 0, dur: 0.35, c: '#e6c896', c2: '#8a6a40' });
   G.shake = 8;
 }
 function roar() {
@@ -598,7 +602,7 @@ function roar() {
     const dx = u.x - h.x, dy = u.y - h.y, d = Math.hypot(dx, dy) || 1;
     if (d < 150) { u.kbx += dx / d * 180; u.kby += dy / d * 180; }
   }
-  G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 20, r1: 450, t: 0, dur: 0.6, c: '255,210,90' });
+  G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 20, r1: 450, t: 0, dur: 0.6, c: '#ffd25a', c2: '#fff0b0' });
   banner('전군, 함성을 올려라!', 'order');
   if (rallied) log(`함성으로 ${rallied}개 부대가 재집결했다`, 'good');
 }
@@ -649,8 +653,11 @@ function updHero(dt) {
   if (h.charging) h.charge = Math.min(1, h.charge + dt * 0.9);
   if (h.musouT > 0) {
     h.musouT -= dt; h.inv = 0.1; h.face += dt * 14; h.musouTick -= dt;
-    if (h.musouTick <= 0) { h.musouTick = 0.12; heroArc(150, Math.PI + 0.01, 55, 90); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 40, r1: 150, t: 0, dur: 0.2, c: '255,170,60' }); }
-    if (h.musouT <= 0) { heroArc(230, Math.PI + 0.01, 260, 320); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 30, r1: 240, t: 0, dur: 0.5, c: '255,240,200' }); G.shake = 12; }
+    if (h.musouTick <= 0) { h.musouTick = 0.12; heroArc(150, Math.PI + 0.01, 55, 90); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 40, r1: 150, t: 0, dur: 0.2, c: '#ffaa3c', c2: '#d05020' }); }
+    if (h.musouT <= 0) { heroArc(230, Math.PI + 0.01, 260, 320); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 30, r1: 240, t: 0, dur: 0.5, c: '#fff0c8', c2: '#ffaa3c' }); G.shake = 12; }
+  }
+  if ((h.mu >= 100 || h.musouT > 0) && Math.random() < dt * (h.musouT > 0 ? 60 : 18)) {
+    G.fx.push({ k: 'ember', x: h.x + rand(-10, 10), y: h.y + rand(-6, 2), vx: rand(-8, 8), vy: -rand(30, 60), t: 0, dur: rand(0.4, 0.8) });
   }
   if (!nearestEnemy(h.x, h.y, 0, 220)) h.hp = Math.min(h.maxHp, h.hp + h.maxHp * 0.012 * dt);
   // 주장은 병사를 밀어낸다
@@ -740,7 +747,7 @@ function update(dt) {
     }
   }
   G.proj = G.proj.filter((p) => !p.done);
-  for (const f of G.fx) { f.t += dt; if (f.k === 'p') { f.x += f.vx * dt; f.y += f.vy * dt; } }
+  for (const f of G.fx) { f.t += dt; if (f.vx !== undefined) { f.x += f.vx * dt; f.y += f.vy * dt; } }
   G.fx = G.fx.filter((f) => f.t < f.dur);
   for (const t of G.texts) { t.t += dt; t.y -= 30 * dt; }
   G.texts = G.texts.filter((t) => t.t < t.dur);
@@ -761,10 +768,11 @@ function checkEnd() {
   if (G.t >= G.b.timeLimit) endBattle(false, '제한 시간이 다 되었다');
 }
 
+const achText = (a) => `${a.t} — ${a.k === 'kills' ? a.d.replace(a.v, scaled(a.v)) : a.d}`;
 function achDone(a, s) {
   switch (a.k) {
     case 'win': return s.win;
-    case 'kills': return s.kills >= a.v;
+    case 'kills': return s.kills >= scaled(a.v);
     case 'survive': return s.win && s.survive >= a.v;
     case 'time': return s.win && s.time <= a.v;
     case 'general': return s.general;
@@ -790,35 +798,97 @@ function endBattle(win, reason) {
       ['적장', G.generalDead ? '격파' : '생존'],
     ].map(([k, v]) => `<div><b>${k}</b><span>${v}</span></div>`).join('');
     $('#res-ach').innerHTML = b.achievements.map((a, i) =>
-      `<div class="${now[i] ? 'ok' : ''} ${now[i] && !prev[i] ? 'new' : ''}">${now[i] ? '◆' : '◇'} ${a.t} — ${a.d}</div>`).join('');
+      `<div class="${now[i] ? 'ok' : ''} ${now[i] && !prev[i] ? 'new' : ''}">${now[i] ? '◆' : '◇'} ${achText(a)}</div>`).join('');
   }, 1400);
 }
 
 // ================= 렌더링 =================
-function spriteAt(c, kind, side, variant, frame, left, x, y) {
-  const s = Sprites.unit(kind, side, variant, frame, left), a = Sprites.anchor(kind);
+// 얼굴 방향 → 스프라이트 방향 (8방향, 45° 구간)
+const DIR8 = [0, 4, 1, 5, 2, 7, 3, 6];
+const dirOf = (f) => DIR8[Math.round(Math.atan2(Math.sin(f), Math.cos(f)) / (Math.PI / 4) + 8) & 7];
+function spriteAt(c, kind, side, variant, frame, dir, x, y) {
+  const s = Sprites.unit(kind, side, variant, frame, dir), a = Sprites.anchor(kind);
   c.drawImage(s, Math.round(x) - a[2], Math.round(y) - a[3]);
 }
 function drawSoldier(c, u) {
   const variant = u.flash > 0 ? 2 : u.reg.routing ? 1 : 0;
   const frame = u.atkA > 0 ? 4 : ((u.anim || 0) | 0) & 3;
-  spriteAt(c, u.tk, u.side, variant, frame, Math.cos(u.face) < 0, u.x, u.y);
+  spriteAt(c, u.tk, u.side, variant, frame, dirOf(u.face), u.x, u.y);
+}
+
+// ---------- 픽셀 효과 (효과 픽셀 1칸 = 월드 2단위) ----------
+const PXS = 2;
+const pxDot = (c, x, y, s = PXS) => c.fillRect(Math.round(x / s) * s, Math.round(y / s) * s, s, s);
+function pxArc(c, cx, cy, r, a0, a1, col, gap = 1) {
+  c.fillStyle = col;
+  const step = PXS / Math.max(r, 1);
+  let i = 0;
+  for (let a = a0; a <= a1; a += step, i++) if (i % gap === 0) pxDot(c, cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+}
+// 3×5 비트맵 숫자
+const DIGITS = ['111101101101111', '010110010010111', '111001111100111', '111001111001111', '101101111001001',
+  '111100111001111', '111100111101111', '111001001010010', '111101111101111', '111101111001111'];
+function pxNumber(c, str, x, y, col, s = PXS) {
+  const w = str.length * 4 * s - s, x0 = Math.round((x - w / 2) / s) * s, y0 = Math.round(y / s) * s;
+  for (const pass of [0, 1]) {
+    c.fillStyle = pass ? col : '#1a0c06';
+    for (let i = 0; i < str.length; i++) {
+      const g = DIGITS[str.charCodeAt(i) - 48];
+      if (!g) continue;
+      for (let b = 0; b < 15; b++) {
+        if (g[b] !== '1') continue;
+        const px = x0 + (i * 4 + (b % 3)) * s, py = y0 + ((b / 3) | 0) * s;
+        if (pass) c.fillRect(px, py, s, s); else c.fillRect(px - s, py - s, s * 3, s * 3);
+      }
+    }
+  }
+}
+function drawFx(c, f) {
+  const p = f.t / f.dur;
+  if (f.k === 'slash') {
+    // 궤적이 휘둘러지며 펼쳐지고, 바깥 띠부터 사라진다
+    const span = 2 * f.half * Math.min(1, p / 0.35), bands = Math.ceil((f.big ? 4 : 3) * (1 - p));
+    const a0 = f.dir > 0 ? f.a - f.half : f.a + f.half - span;
+    const cols = ['#ffffff', '#fff0b0', '#ffc860', '#e07a30'];
+    for (let k = 0; k < bands; k++) pxArc(c, f.x, f.y - 8, f.r - k * PXS, a0, a0 + span, cols[k], p > 0.6 ? 2 : 1);
+  } else if (f.k === 'ring') {
+    const r = f.r0 + (f.r1 - f.r0) * p;
+    pxArc(c, f.x, f.y, r, 0, TAU, f.c, p < 0.4 ? 1 : p < 0.75 ? 2 : 3);
+    if (p < 0.5) pxArc(c, f.x, f.y, r - PXS * 2, 0, TAU, f.c2 || f.c, 3);
+  } else if (f.k === 'spark') {
+    const n = 1 + Math.round(3 * (1 - p));
+    c.fillStyle = '#fff6c8'; pxDot(c, f.x, f.y);
+    c.fillStyle = p < 0.5 ? '#ffe070' : '#ff9a40';
+    for (let i = 1; i <= n; i++) { pxDot(c, f.x + i * PXS, f.y); pxDot(c, f.x - i * PXS, f.y); pxDot(c, f.x, f.y + i * PXS); pxDot(c, f.x, f.y - i * PXS); }
+  } else if (f.k === 'ember') {
+    c.fillStyle = p < 0.35 ? '#fff0a0' : p < 0.7 ? '#ffb040' : '#c84a20'; pxDot(c, f.x, f.y);
+  } else {
+    c.fillStyle = f.c; pxDot(c, f.x, f.y);
+  }
+}
+function drawArrow(c, p) {
+  const f = p.t / p.dur, x = p.x0 + (p.x1 - p.x0) * f, len = Math.hypot(p.x1 - p.x0, p.y1 - p.y0) || 1;
+  const y = p.y0 + (p.y1 - p.y0) * f - 10 - Math.sin(Math.PI * f) * len * 0.15;
+  // 포물선 기울기를 반영한 화살 방향
+  const dx = (p.x1 - p.x0) / len, dy = (p.y1 - p.y0) / len - Math.cos(Math.PI * f) * Math.PI * 0.15;
+  const dl = Math.hypot(dx, dy) || 1, ux = dx / dl, uy = dy / dl;
+  for (let i = 0; i < 8; i++) {
+    c.fillStyle = i < 2 ? '#e6eaf0' : i > 5 ? '#f4f0e6' : '#8a5a2a';
+    c.fillRect(Math.round(x - ux * i), Math.round(y - uy * i), 1, 1);
+  }
 }
 
 function drawHero(c) {
   const h = G.hero; if (h.dead) return;
-  const x = h.x, y = h.y, left = Math.cos(h.face) < 0;
+  const x = h.x, y = h.y, dir = dirOf(h.face);
   if (h.charging) {
-    c.strokeStyle = `rgba(255,210,90,${0.3 + 0.5 * h.charge})`; c.lineWidth = 2; c.setLineDash([6, 6]);
-    c.beginPath(); c.arc(x, y - 8, 70 + 70 * h.charge, 0, TAU); c.stroke(); c.setLineDash([]);
-  }
-  if (h.mu >= 100 || h.musouT > 0) {
-    c.fillStyle = 'rgba(255,160,40,.22)'; c.beginPath(); c.ellipse(x, y - 2, 20 + 4 * Math.sin(G.t * 10), 9, 0, 0, TAU); c.fill();
+    const col = h.charge >= 1 ? '#fff0a0' : '#ffc860';
+    pxArc(c, x, y, 70 + 70 * h.charge, G.t * 2, G.t * 2 + TAU, col, 3);
   }
   const frame = h.charging ? 5 : h.swingT > 0 || h.musouT > 0 ? 4 : h.moving ? ((h.anim | 0) & 3) : 0;
-  if (h.dodgeT > 0) { c.globalAlpha = 0.35; spriteAt(c, 'hero', 0, 0, frame, left, x - h.ddx * 16, y - h.ddy * 16); }
+  if (h.dodgeT > 0) { c.globalAlpha = 0.35; spriteAt(c, 'hero', 0, 0, frame, dir, x - h.ddx * 16, y - h.ddy * 16); }
   c.globalAlpha = h.inv > 0 && h.musouT <= 0 ? 0.6 : 1;
-  spriteAt(c, 'hero', 0, h.flash > 0 ? 2 : 0, frame, left, x, y);
+  spriteAt(c, 'hero', 0, h.flash > 0 ? 2 : 0, frame, dir, x, y);
   c.globalAlpha = 1;
 }
 
@@ -872,23 +942,8 @@ function render() {
     ctx.beginPath(); ctx.moveTo(h.x, h.y - 42); ctx.lineTo(h.x - 6 * s, h.y - 42 - 9 * s); ctx.lineTo(h.x + 6 * s, h.y - 42 - 9 * s); ctx.closePath(); ctx.fill();
   }
 
-  ctx.strokeStyle = '#e8dcc0'; ctx.lineWidth = 1.2;
-  for (const p of G.proj) {
-    const f = p.t / p.dur, x = p.x0 + (p.x1 - p.x0) * f, y = p.y0 + (p.y1 - p.y0) * f;
-    const len = Math.hypot(p.x1 - p.x0, p.y1 - p.y0) || 1, hgt = Math.sin(Math.PI * f) * len * 0.15;
-    const dx = (p.x1 - p.x0) / len * 7, dy = (p.y1 - p.y0) / len * 7;
-    ctx.beginPath(); ctx.moveTo(x - dx, y - dy - hgt); ctx.lineTo(x + dx, y + dy - hgt); ctx.stroke();
-  }
-  for (const f of G.fx) {
-    const p = f.t / f.dur;
-    if (f.k === 'slash') {
-      ctx.strokeStyle = `rgba(255,244,214,${1 - p})`; ctx.lineWidth = (f.big ? 10 : 6) * (1 - p) + 1;
-      ctx.beginPath(); ctx.arc(f.x, f.y, f.r * (0.8 + 0.2 * p), f.a - f.half, f.a + f.half); ctx.stroke();
-    } else if (f.k === 'ring') {
-      ctx.strokeStyle = `rgba(${f.c},${0.8 * (1 - p)})`; ctx.lineWidth = 5 * (1 - p) + 1;
-      ctx.beginPath(); ctx.arc(f.x, f.y, f.r0 + (f.r1 - f.r0) * p, 0, TAU); ctx.stroke();
-    } else { ctx.fillStyle = f.c; ctx.globalAlpha = 1 - p; ctx.fillRect(f.x - 1.5, f.y - 1.5, 3, 3); ctx.globalAlpha = 1; }
-  }
+  for (const p of G.proj) drawArrow(ctx, p);
+  for (const f of G.fx) drawFx(ctx, f);
   // 군기
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (const r of G.regs) {
@@ -905,9 +960,7 @@ function render() {
       ctx.fillText(r.name + (r.routing ? ' (패주)' : ''), fx, fy - 18 * s * big);
     }
   }
-  ctx.font = `bold ${14 * s}px sans-serif`;
-  for (const t of G.texts) { ctx.globalAlpha = 1 - t.t / t.dur; ctx.fillStyle = t.c; ctx.fillText(t.s, t.x, t.y); }
-  ctx.globalAlpha = 1;
+  for (const t of G.texts) pxNumber(ctx, String(t.s), t.x, t.y, t.t / t.dur < 0.6 ? t.c : '#c8a860', 1);
 }
 
 function drawMinimap() {
@@ -936,14 +989,14 @@ function log(text, cls = '') {
 function iconCanvas(cvs, tk, side) {
   const c = cvs.getContext('2d'), k = tk === 'cav' ? 1.6 : 2.4, a = Sprites.anchor(tk);
   c.clearRect(0, 0, cvs.width, cvs.height); c.imageSmoothingEnabled = false;
-  const s = Sprites.unit(tk, side, 0, 0, false);
+  const s = Sprites.unit(tk, side, 0, 0, 0);
   c.drawImage(s, cvs.width / 2 - a[2] * k, cvs.height - 3 - a[3] * k, s.width * k, s.height * k);
 }
 function drawPortrait() {
   const cvs = $('#portrait'), c = cvs.getContext('2d'), g = c.createRadialGradient(36, 30, 4, 36, 36, 50);
   g.addColorStop(0, '#6a2a18'); g.addColorStop(1, '#1a0c08'); c.fillStyle = g; c.fillRect(0, 0, 72, 72);
   c.imageSmoothingEnabled = false;
-  const s = Sprites.unit('hero', 0, 0, 0, false), a = Sprites.anchor('hero'), k = 1.8;
+  const s = Sprites.unit('hero', 0, 0, 0, 1), a = Sprites.anchor('hero'), k = 1.8;
   c.drawImage(s, 36 - a[2] * k, 70 - a[3] * k, s.width * k, s.height * k);
 }
 function buildHud() {
@@ -1084,6 +1137,8 @@ $('#btn-quit').onclick = backToMenu;
 $('#btn-menu').onclick = backToMenu;
 $('#btn-retry').onclick = () => startBattle(G.b);
 $('#btn-start').onclick = () => startBattle(menuSel);
+$('#sel-scale').value = save.scale;
+$('#sel-scale').onchange = (e) => { save.scale = SCALES.includes(+e.target.value) ? +e.target.value : 1; persist(); renderMenu(); };
 
 // ================= 메뉴 =================
 let menuMode = 'tactical', menuSel = BATTLES[0];
@@ -1110,7 +1165,7 @@ function renderMenu() {
 }
 function armySummary(regs) {
   const by = {};
-  for (const r of regs) by[r.type] = (by[r.type] || 0) + r.count;
+  for (const r of regs) by[r.type] = (by[r.type] || 0) + scaled(r.count);
   return Object.entries(by).map(([k, v]) => `${UNIT_TYPES[k].name} <span>${v}</span>`).join(' · ');
 }
 function showDetail(b) {
@@ -1119,8 +1174,8 @@ function showDetail(b) {
   $('#bd-sub').textContent = `${b.place} · ${b.year}년`;
   $('#bd-sides').textContent = `${b.sides[0]} vs ${b.sides[1]}`;
   const waveRegs = (b.events || []).flatMap((ev) => ev.regs || []);
-  const eTotal = b.enemy.regs.concat(waveRegs).reduce((a, r) => a + r.count, 0) + (b.enemy.general ? 1 : 0);
-  const pTotal = b.player.regs.reduce((a, r) => a + r.count, 0);
+  const eTotal = b.enemy.regs.concat(waveRegs).reduce((a, r) => a + scaled(r.count), 0) + (b.enemy.general ? 1 : 0);
+  const pTotal = b.player.regs.reduce((a, r) => a + scaled(r.count), 0);
   $('#bd-armies').innerHTML =
     `<div class="army me"><h4>${b.sides[0]}<b>${pTotal}명</b></h4>주장 ${b.heroName}<br>${armySummary(b.player.regs)}</div>` +
     `<div class="army en"><h4>${b.sides[1]}<b>${eTotal}명</b></h4>적장 ${b.enemy.general ? b.enemy.general.name : '-'}<br>${armySummary(b.enemy.regs.concat(waveRegs))}</div>`;
@@ -1128,7 +1183,7 @@ function showDetail(b) {
   $('#bd-hist').innerHTML = [['연대', hs.era], ['교전 세력', hs.sides], ['전쟁의 원인', hs.cause], ['전투 경과', hs.course], ['역사적 결과', hs.outcome], ['공략', hs.advice], ['승리 조건', b.objective]]
     .map(([k, v]) => `<h5>${k}</h5><p>${v}</p>`).join('') + `<p class="note">${hs.note}</p>`;
   const got = save.ach[b.id] || [];
-  $('#bd-ach').innerHTML = b.achievements.map((a, i) => `<div class="${got[i] ? 'ok' : ''}"><i>${got[i] ? '◆' : '◇'}</i>${a.t} — ${a.d}</div>`).join('');
+  $('#bd-ach').innerHTML = b.achievements.map((a, i) => `<div class="${got[i] ? 'ok' : ''}"><i>${got[i] ? '◆' : '◇'}</i>${achText(a)}</div>`).join('');
   drawPreview(b);
 }
 const previewCache = new Map();
@@ -1138,7 +1193,7 @@ function drawPreview(b) {
   if (!previewCache.has(b.id)) previewCache.set(b.id, renderTerrainFlat(buildTerrain(b.map), k));
   c.drawImage(previewCache.get(b.id), 0, 0);
   const dot = (r, side) => {
-    const n = Math.sqrt(r.count) * 2.4;
+    const n = Math.sqrt(scaled(r.count)) * 2.4;
     c.fillStyle = PAL[side].flag; c.strokeStyle = '#000'; c.lineWidth = 1;
     c.fillRect(r.x * k - n / 2, r.y * k - n / 3, n, n * 0.66); c.strokeRect(r.x * k - n / 2, r.y * k - n / 3, n, n * 0.66);
   };

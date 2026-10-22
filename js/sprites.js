@@ -1,5 +1,5 @@
 'use strict';
-// 픽셀아트 스프라이트를 코드로 생성한다. 오른쪽을 보는 원본을 그린 뒤 자동 외곽선·좌우 반전·피격 실루엣을 만들어 캐시한다.
+// 픽셀아트 스프라이트를 코드로 생성한다. 오른쪽·정면·뒷모습을 그린 뒤 자동 외곽선·좌우 반전·피격 실루엣을 만들어 캐시한다.
 const Sprites = (() => {
   const C = {
     out: '#140c08', skin: '#e8b890', skinD: '#b07850', metal: '#8e96a0', metalL: '#d4dae0', metalD: '#4e555e',
@@ -158,23 +158,142 @@ const Sprites = (() => {
     P(-5, -15, 9, 6, tm.t); P(-5, -15, 9, 1, tm.d); P(-5, -10, 9, 1, C.gold);
   }
 
-  function build(kind, tm, frame) {
+  // ---------- 사람: 정면(아래 방향) / 뒷모습(위 방향) ----------
+  function manFB({ P, L }, tm, kind, frame, oy, rider, back, dg) {
+    const atk = frame === 4, chg = frame === 5, f = frame < 4 ? frame : 0;
+    const Y = (y) => y + oy;
+    const lord = kind === 'hero' || kind === 'general';
+    const elite = lord || kind === 'guard';
+    const up = atk || chg;
+
+    // 손 위치: 평상시 (4,-8), 공격·모으기 시 머리 위로 (4,-16)
+    const weapon = () => {
+      if (kind === 'sword' || kind === 'guard') {
+        if (up) { P(3, Y(-16), 3, 1, C.gold); P(4, Y(-26), 1, 10, C.steel); }
+        else if (dg) { P(3, Y(-8), 3, 1, C.gold); L(4, Y(-9), 8, Y(-17), C.steel); P(5, Y(-9), 1, 1, C.metalL); }
+        else { P(3, Y(-8), 3, 1, C.gold); P(4, Y(-15), 1, 7, C.steel); }
+      } else if (kind === 'spear') {
+        if (up) { P(5, Y(-36), 1, 24, C.wood); P(5, Y(-39), 1, 3, C.steel); P(4, Y(-37), 3, 1, C.steel); }
+        else if (dg) { L(5, Y(-2), 8, Y(-29), C.wood); P(8, Y(-32), 1, 3, C.steel); P(7, Y(-30), 3, 1, C.steel); }
+        else { P(5, Y(-28), 1, 26, C.wood); P(5, Y(-31), 1, 3, C.steel); P(4, Y(-29), 3, 1, C.steel); }
+      } else if (kind === 'archer') {
+        if (up) { P(-3, Y(-15), 9, 1, C.wood); P(-4, Y(-14), 1, 1, C.wood); P(6, Y(-14), 1, 1, C.wood); P(-3, Y(-13), 9, 1, C.string); }
+        else { P(5, Y(-19), 1, 13, C.wood); P(4, Y(-18), 1, 11, C.string); }
+      } else if (kind === 'hero') {
+        if (chg) { P(-1, Y(-24), 3, 1, C.gold); P(0, Y(-38), 2, 14, C.steel); P(0, Y(-38), 1, 14, C.metalL); }
+        else if (atk) { P(3, Y(-16), 4, 1, C.gold); P(4, Y(-30), 2, 14, C.steel); P(4, Y(-30), 1, 14, C.metalL); }
+        else if (dg) { P(3, Y(-9), 3, 1, C.gold); L(4, Y(-10), 12, Y(-22), C.steel); L(5, Y(-10), 13, Y(-22), C.metalL); }
+        else { P(3, Y(-9), 3, 1, C.gold); L(4, Y(-10), 9, Y(-25), C.steel); L(5, Y(-10), 10, Y(-25), C.metalL); }
+      } else if (kind === 'general') {
+        if (up) { P(5, Y(-34), 1, 22, C.wood); P(5, Y(-39), 2, 5, C.steel); }
+        else if (dg) { L(5, Y(-2), 9, Y(-30), C.wood); P(9, Y(-35), 2, 5, C.steel); }
+        else { P(6, Y(-30), 1, 28, C.wood); P(6, Y(-35), 2, 5, C.steel); }
+      } else if (kind === 'cav') {
+        if (atk) { P(5, -24, 1, 22, C.wood); P(5, -2, 1, 3, C.steel); }
+        else { P(5, -42, 1, 32, C.wood); P(5, -44, 1, 2, C.steel); }
+      }
+    };
+    const banner = () => { P(0, Y(-36), 1, 24, C.woodD); P(-3, Y(-36), 7, 7, tm.t); P(-3, Y(-36), 7, 1, C.gold); P(-3, Y(-30), 7, 1, C.gold); P(-1, Y(-34), 3, 2, C.gold); };
+
+    // 몸 뒤
+    if (back) weapon();
+    else {
+      if (lord) banner();
+      if (elite) P(-5, Y(-13), 10, 9, tm.d);
+      if (kind === 'archer') { P(3, Y(-17), 2, 3, C.wood); P(3, Y(-18), 1, 1, C.white); P(4, Y(-19), 1, 1, C.white); }
+    }
+    // 다리
+    if (rider) { P(-6, -12, 2, 4, C.pants); P(-6, -8, 2, 1, C.boot); P(4, -12, 2, 4, C.pants); P(4, -8, 2, 1, C.boot); }
+    else {
+      const lift = [[0, 0], [1, 0], [0, 0], [0, 1]][f];
+      const l0 = dg ? -2 : -3, l1 = dg ? 2 : 1;
+      P(l0, -6 - lift[0], 2, 4, C.pants); P(l0, -2 - lift[0], 3, 2, C.boot);
+      P(l1, -6 - lift[1], 2, 4, C.pants); P(l1, -2 - lift[1], 3, 2, C.boot);
+    }
+    // 몸통
+    const tx = dg ? -3 : -4, tw = dg ? 7 : 8;
+    P(tx, Y(-13), tw, 7, tm.t); P(tx, Y(-13), 1, 7, tm.d); P(tx + tw - 1, Y(-13), 1, 7, tm.d);
+    if (back) {
+      if (elite) P(-4, Y(-13), 8, 9, tm.d);
+      else if (kind !== 'archer') { P(-3, Y(-12), 6, 3, C.metal); P(-3, Y(-10), 6, 1, C.metalD); }
+    } else if (kind !== 'archer') {
+      P(-3, Y(-12), 6, 4, elite ? C.metalL : C.metal); P(-3, Y(-11), 6, 1, C.metalD); P(-3, Y(-9), 6, 1, C.metalD);
+    }
+    P(-4, Y(-7), 8, 1, C.woodD);
+    if (!back) P(-1, Y(-7), 2, 1, C.gold);
+    if (!rider && !(back && elite)) P(-4, Y(-6), 8, 1, tm.d);
+    // 팔
+    P(-5, Y(-12), 1, 4, tm.t); P(-5, Y(-8), 1, 1, C.skin);
+    if (up) { P(4, Y(-15), 1, 4, tm.t); P(4, Y(-16), 1, 1, C.skin); }
+    else { P(4, Y(-12), 1, 4, tm.t); P(4, Y(-8), 1, 1, C.skin); }
+    // 머리
+    P(-1, Y(-14), 3, 1, C.skinD);
+    if (back) P(-2, Y(-18), 5, 4, '#3a2418');
+    else { P(-2, Y(-18), 5, 4, C.skin); P(-2, Y(-18), 1, 4, C.skinD); if (dg) P(1, Y(-16), 1, 1, C.out); else { P(-1, Y(-16), 1, 1, C.out); P(1, Y(-16), 1, 1, C.out); } }
+    if (kind === 'archer') {
+      P(-3, Y(-20), 7, 2, tm.d); if (back) P(-3, Y(-18), 7, 2, tm.d);
+    } else {
+      const hm = elite ? [C.gold, C.goldL, C.goldD] : [C.metal, C.metalL, C.metalD];
+      P(-3, Y(-21), 7, 3, hm[0]); P(-1, Y(-21), 2, 1, hm[1]); P(-3, Y(-18), 7, 1, hm[2]);
+      P(-3, Y(-17), 1, 2, hm[2]); P(3, Y(-17), 1, 2, hm[2]);
+      if (back) P(-2, Y(-17), 5, 2, hm[2]);
+      if (elite) { P(0, Y(-25), 1, 4, tm.l); P(-1, Y(-24), 1, 2, tm.t); P(1, Y(-24), 1, 2, tm.t); } else P(0, Y(-22), 1, 1, tm.t);
+    }
+    // 몸 앞
+    if (back) {
+      if (lord) banner();
+      if (kind === 'archer') { P(-1, Y(-17), 2, 9, C.wood); P(-1, Y(-18), 1, 1, C.white); P(0, Y(-19), 1, 1, C.white); }
+      if (kind === 'sword' || kind === 'guard') { P(-8, Y(-13), 4, 8, C.woodD); P(-8, Y(-13), 4, 1, C.metal); P(-8, Y(-6), 4, 1, C.metal); }
+    } else {
+      if (kind === 'sword' || kind === 'guard') {
+        const trim = kind === 'guard' ? C.gold : C.metal;
+        P(-8, Y(-13), 4, 8, tm.d); P(-8, Y(-13), 4, 1, trim); P(-8, Y(-6), 4, 1, trim); P(-7, Y(-10), 2, 2, C.metalL);
+      }
+      weapon();
+    }
+  }
+
+  // ---------- 말: 정면/뒷모습 (part: 'body' | 'head') ----------
+  function horseFB({ P }, tm, frame, back, part) {
+    const f = frame < 4 ? frame : 0, lift = [[0, 1], [1, 0], [0, 1], [1, 0]][f];
+    if (part === 'body') {
+      P(-4, -7 - lift[0], 2, 6, C.horse); P(-4, -1 - lift[0], 2, 1, C.mane);
+      P(2, -7 - lift[1], 2, 6, C.horse); P(2, -1 - lift[1], 2, 1, C.mane);
+      P(-5, -15, 10, 8, C.horse); P(-5, -15, 10, 1, C.horseL); P(-5, -8, 10, 1, C.horseD);
+      P(-6, -14, 12, 5, tm.t); P(-6, -10, 12, 1, C.gold);
+      if (back) { P(-1, -14, 2, 8, C.mane); P(-1, -6, 1, 2, C.mane); }
+    } else if (back) {
+      P(-2, -21, 4, 3, C.horse); P(-2, -23, 1, 2, C.mane); P(1, -23, 1, 2, C.mane);
+    } else {
+      P(-2, -16, 4, 8, C.horse); P(-2, -16, 4, 1, C.horseL); P(-2, -10, 4, 2, C.horseD);
+      P(-2, -13, 1, 1, C.out); P(1, -13, 1, 1, C.out);
+      P(-2, -18, 1, 2, C.mane); P(1, -18, 1, 2, C.mane); P(-1, -17, 2, 2, C.mane);
+    }
+  }
+
+  // dir: 0 오른쪽, 1 아래(정면), 3 위(뒷모습). 왼쪽(2)은 오른쪽을 뒤집어 만든다.
+  function build(kind, tm, frame, dir) {
     const box = kind === 'cav' ? BOX.cav : BOX.man;
-    const c = canvas(box[0], box[1]), p = painter(c, box[2], box[3]);
-    if (kind === 'cav') { horse(p, tm, frame); man(p, tm, 'cav', frame, -9, true); }
-    else man(p, tm, kind, frame);
+    const c = canvas(box[0], box[1]), p = painter(c, box[2], box[3]), dg = dir >= 4, back = dir === 3 || dir === 6;
+    if (kind === 'cav') {
+      if (dir === 0) { horse(p, tm, frame); man(p, tm, 'cav', frame, -9, true); }
+      else if (dg) { horse(p, tm, frame); manFB(p, tm, 'cav', frame, -9, true, back, true); }
+      else if (back) { horseFB(p, tm, frame, true, 'head'); horseFB(p, tm, frame, true, 'body'); manFB(p, tm, 'cav', frame, -9, true, true); }
+      else { horseFB(p, tm, frame, false, 'body'); manFB(p, tm, 'cav', frame, -9, true, false); horseFB(p, tm, frame, false, 'head'); }
+    } else if (dir === 0) man(p, tm, kind, frame);
+    else manFB(p, tm, kind, frame, 0, false, back, dg);
     return outline(c, C.out);
   }
 
   const cache = new Map();
-  // variant: 0 평상, 1 패주(무채색), 2 피격(흰 실루엣)
-  function unit(kind, side, variant, frame, left) {
-    const k = `${kind}|${side}|${variant}|${frame}|${left ? 1 : 0}`;
+  // variant: 0 평상, 1 패주(무채색), 2 피격(흰 실루엣) / dir: 0 오른쪽, 1 아래, 2 왼쪽, 3 위, 4 오른쪽아래, 5 왼쪽아래, 6 오른쪽위, 7 왼쪽위
+  function unit(kind, side, variant, frame, dir) {
+    const k = `${kind}|${side}|${variant}|${frame}|${dir}`;
     let s = cache.get(k);
     if (s) return s;
-    if (left) s = flip(unit(kind, side, variant, frame, false));
-    else if (variant === 2) s = silhouette(unit(kind, side, 0, frame, false), '#ffffff');
-    else s = build(kind, variant === 1 ? ROUT : TEAM[side], frame);
+    if (dir === 2 || dir === 5 || dir === 7) s = flip(unit(kind, side, variant, frame, { 2: 0, 5: 4, 7: 6 }[dir]));
+    else if (variant === 2) s = silhouette(unit(kind, side, 0, frame, dir), '#ffffff');
+    else s = build(kind, variant === 1 ? ROUT : TEAM[side], frame, dir);
     cache.set(k, s);
     return s;
   }
