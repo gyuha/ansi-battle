@@ -390,7 +390,14 @@ function thinkReg(r, dt) {
     tgt = o.target && !o.target.dead ? o.target : pickTarget(r);
     if (!tgt) r.order = { k: 'hold', x: r.cx, y: r.cy, face: r.face };
   } else if (o.k === 'auto') {
-    if (G.t < r.wait && !nearestEnemy(r.cx, r.cy, r.side, 520)) { ax = r.home.x; ay = r.home.y; engR = 90; }
+    const commander = r.side === 1 && r.tk === 'guard' && G.regs.find((x) => x.isGeneral && !x.dead && x.alive > 0);
+    if (commander) {
+      // 친위대는 출격 대기 시간이 지나도 적장을 버리지 않고, 본진에 들어온 적만 요격한다.
+      const raider = nearestEnemy(commander.cx, commander.cy, r.side, 600);
+      ax = commander.cx - 100; ay = commander.cy; engR = 90;
+      if (raider) tgt = { cx: raider.x, cy: raider.y, hero: true };
+    }
+    else if (G.t < r.wait && !nearestEnemy(r.cx, r.cy, r.side, 520)) { ax = r.home.x; ay = r.home.y; engR = 90; }
     else tgt = pickTarget(r);
   } else if (o.k === 'follow') {
     const p = followPos(r); ax = p.x; ay = p.y; face = G.followFace; engR = 150;
@@ -492,6 +499,12 @@ function shoot(u, e) {
   G.proj.push({ x0: u.x, y0: u.y, x1: e.x + rand(-spread, spread), y1: e.y + rand(-spread, spread), t: 0, dur: Math.max(0.25, d / 380), side: u.side, dmg, src: u });
 }
 
+// 적장은 일반 병사처럼 밀려나지 않는다. 피해 인원 상한 밖의 넉백에도 같은 저항을 적용한다.
+function knockback(t, kx, ky) {
+  const resist = t.reg.isGeneral ? 0.2 : 1;
+  t.kbx += kx * resist; t.kby += ky * resist;
+}
+
 function hurt(t, amt, src, kx = 0, ky = 0) {
   if (t.dead || G.over) return;
   if (t.isHero) {
@@ -510,7 +523,7 @@ function hurt(t, amt, src, kx = 0, ky = 0) {
   if (!t.reg.led) m *= 1.25;
   if (t.reg.routing) m *= 1.5;
   if (tAt(G.T, t.x, t.y) === T_HILL && !(src && tAt(G.T, src.x, src.y) === T_HILL)) m *= 0.7;
-  t.hp -= amt * m; t.flash = 0.1; t.kbx += kx; t.kby += ky;
+  t.hp -= amt * m; t.flash = 0.1; knockback(t, kx, ky);
   if (src === G.hero) { G.hero.mu = Math.min(100, G.hero.mu + 0.3); G.comboT = 2.5; }
   if (t.hp <= 0) kill(t, src);
 }
@@ -548,6 +561,8 @@ function separate() {
 }
 
 // ================= 주장 =================
+// 기술마다 무쌍 게이지를 소모한다 (쿨다운·기력 비용과 별도)
+const MU_COST = { q: 20, e: 25, r: 15, sp: 10 };
 const busy = (h) => h.dead || h.dashT > 0 || h.dodgeT > 0 || h.musouT > 0;
 
 function heroArc(rad, half, dmg, kb, cap) {
@@ -568,7 +583,7 @@ function heroArc(rad, half, dmg, kb, cap) {
       const v = dmg * h.atk * rand(0.9, 1.1);
       hurt(u, v, h, dx / d * kb, dy / d * kb);
       if (i < 5) { floatText(u.x, u.y - 10, Math.round(v), '#ffe8a0'); G.fx.push({ k: 'spark', x: u.x + rand(-3, 3), y: u.y - 10 + rand(-3, 3), t: 0, dur: 0.16 }); }
-    } else if (!u.dead) { u.kbx += dx / d * kb; u.kby += dy / d * kb; }
+    } else if (!u.dead) { knockback(u, dx / d * kb, dy / d * kb); }
   }
   if (hit.length) G.shake = Math.max(G.shake, 2);
   return n;
@@ -595,8 +610,8 @@ function chargeRelease() {
   G.shake = Math.max(G.shake, 3 + 6 * c); h.swingT = h.swingDur = 0.3;
 }
 function dash() {
-  const h = G.hero; if (busy(h) || h.cd.q > 0 || h.st < 15) return;
-  h.dashT = 0.24; h.inv = 0.24; h.cd.q = 5; h.st -= 15; h.dashSet = new Set(); h.charging = false;
+  const h = G.hero; if (busy(h) || h.cd.q > 0 || h.st < 15 || h.mu < MU_COST.q) return;
+  h.dashT = 0.24; h.inv = 0.24; h.cd.q = 5; h.st -= 15; h.mu -= MU_COST.q; h.dashSet = new Set(); h.charging = false;
 }
 function dashHits() {
   const h = G.hero, a = G.grid.near(h.x, h.y, 36, NB_B).slice(), px = -Math.sin(h.face), py = Math.cos(h.face);
@@ -606,19 +621,19 @@ function dashHits() {
     const s = (u.x - h.x) * px + (u.y - h.y) * py >= 0 ? 1 : -1, damaged = h.dashSet.size < 3;
     h.dashSet.add(u);
     if (damaged) { const v = 50 * h.atk; hurt(u, v, h, px * s * 140, py * s * 140); floatText(u.x, u.y - 10, Math.round(v), '#ffe8a0'); }
-    else { u.kbx += px * s * 140; u.kby += py * s * 140; }
+    else { knockback(u, px * s * 140, py * s * 140); }
   }
 }
 function slam() {
-  const h = G.hero; if (busy(h) || h.cd.e > 0) return;
-  h.cd.e = 8; h.charging = false;
+  const h = G.hero; if (busy(h) || h.cd.e > 0 || h.mu < MU_COST.e) return;
+  h.cd.e = 8; h.mu -= MU_COST.e; h.charging = false;
   heroArc(125, Math.PI + 0.01, 55, 230, 5);
   G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 10, r1: 130, t: 0, dur: 0.35, c: '#e6c896', c2: '#8a6a40' });
   G.shake = 8;
 }
 function roar() {
-  const h = G.hero; if (busy(h) || h.cd.r > 0) return;
-  h.cd.r = 22;
+  const h = G.hero; if (busy(h) || h.cd.r > 0 || h.mu < MU_COST.r) return;
+  h.cd.r = 22; h.mu -= MU_COST.r;
   let rallied = 0;
   for (const r of G.regs) {
     if (r.dead) continue;
@@ -630,7 +645,7 @@ function roar() {
   for (const u of G.grid.near(h.x, h.y, 150, NB_B).slice()) {
     if (u.dead || u.side === 0) continue;
     const dx = u.x - h.x, dy = u.y - h.y, d = Math.hypot(dx, dy) || 1;
-    if (d < 150) { u.kbx += dx / d * 180; u.kby += dy / d * 180; }
+    if (d < 150) knockback(u, dx / d * 180, dy / d * 180);
   }
   G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 20, r1: 450, t: 0, dur: 0.6, c: '#ffd25a', c2: '#fff0b0' });
   banner('전군, 함성을 올려라!', 'order');
@@ -642,11 +657,11 @@ function musou() {
   banner('무 쌍 난 무', 'musou');
 }
 function dodge() {
-  const h = G.hero; if (busy(h) || h.st < 22) return;
+  const h = G.hero; if (busy(h) || h.st < 22 || h.mu < MU_COST.sp) return;
   let ix = (key('KeyD') ? 1 : 0) - (key('KeyA') ? 1 : 0), iy = (key('KeyS') ? 1 : 0) - (key('KeyW') ? 1 : 0);
   if (!ix && !iy) { ix = -Math.cos(h.face); iy = -Math.sin(h.face); }
   const l = Math.hypot(ix, iy); h.ddx = ix / l; h.ddy = iy / l;
-  h.dodgeT = 0.28; h.inv = 0.36; h.st -= 22; h.charging = false;
+  h.dodgeT = 0.28; h.inv = 0.36; h.st -= 22; h.mu -= MU_COST.sp; h.charging = false;
 }
 
 function updHero(dt) {
@@ -682,9 +697,11 @@ function updHero(dt) {
   if (h.comboWin > 0) { h.comboWin -= dt; if (h.comboWin <= 0) h.combo = 0; }
   if (h.charging) h.charge = Math.min(1, h.charge + dt * 0.9);
   if (h.musouT > 0) {
+    // 전술전에서는 무쌍 피해가 무쌍전의 1/3이다
+    const full = G.b.mode === 'musou';
     h.musouT -= dt; h.inv = 0.1; h.face += dt * 14; h.musouTick -= dt;
-    if (h.musouTick <= 0) { h.musouTick = 0.12; heroArc(150, Math.PI + 0.01, 30, 90, 6); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 40, r1: 150, t: 0, dur: 0.2, c: '#ffaa3c', c2: '#d05020' }); }
-    if (h.musouT <= 0) { heroArc(230, Math.PI + 0.01, 100, 320, 10); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 30, r1: 240, t: 0, dur: 0.5, c: '#fff0c8', c2: '#ffaa3c' }); G.shake = 12; }
+    if (h.musouTick <= 0) { h.musouTick = 0.12; heroArc(150, Math.PI + 0.01, full ? 30 : 10, 90, 6); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 40, r1: 150, t: 0, dur: 0.2, c: '#ffaa3c', c2: '#d05020' }); }
+    if (h.musouT <= 0) { heroArc(230, Math.PI + 0.01, full ? 100 : 33, 320, 10); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 30, r1: 240, t: 0, dur: 0.5, c: '#fff0c8', c2: '#ffaa3c' }); G.shake = 12; }
   }
   if ((h.mu >= 100 || h.musouT > 0) && Math.random() < dt * (h.musouT > 0 ? 60 : 18)) {
     G.fx.push({ k: 'ember', x: h.x + rand(-10, 10), y: h.y + rand(-6, 2), vx: rand(-8, 8), vy: -rand(30, 60), t: 0, dur: rand(0.4, 0.8) });
@@ -1068,10 +1085,10 @@ function updHud() {
   document.querySelector('.gauge.mu').classList.toggle('full', h.mu >= 100);
   $('#st-fill').style.width = h.st + '%';
   const cdv = { q: [h.cd.q, 5], e: [h.cd.e, 8], r: [h.cd.r, 22] };
-  for (const k in cdv) $(`#sk-${k} .cd`).style.height = (Math.max(0, cdv[k][0]) / cdv[k][1] * 100) + '%';
+  for (const k in cdv) $(`#sk-${k} .cd`).style.height = (h.mu < MU_COST[k] ? 100 : Math.max(0, cdv[k][0]) / cdv[k][1] * 100) + '%';
   $('#sk-t .cd').style.height = (100 - h.mu) + '%';
   $('#sk-t').classList.toggle('ready', h.mu >= 100);
-  $('#sk-sp .cd').style.height = (h.st < 22 ? 100 : 0) + '%';
+  $('#sk-sp .cd').style.height = (h.st < 22 || h.mu < MU_COST.sp ? 100 : 0) + '%';
   $('#kills').textContent = G.kills;
   $('#combo').style.opacity = G.combo >= 3 ? 1 : 0; $('#combo-n').textContent = G.combo;
   for (const r of G.regs) {
@@ -1135,6 +1152,7 @@ addEventListener('keydown', (e) => {
     KeyC: () => issue('follow'), KeyV: () => issue('attack'), KeyZ: () => issue('charge'), KeyX: () => issue('hold'), KeyB: () => issue('auto'),
     KeyF: () => setForm('rect'), KeyG: () => setForm('circle'), KeyH: () => setForm('wedge'), BracketLeft: () => setForm('snake'), BracketRight: () => setForm('hollow'),
     Backquote: () => G.sel.clear(), Digit0: () => G.sel.clear(),
+    Minus: () => { for (const r of playerRegs()) G.sel.add(r.id); },
   };
   if (e.code === 'Space') { e.preventDefault(); dodge(); }
   else if (map[e.code]) map[e.code]();
