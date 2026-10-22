@@ -361,7 +361,7 @@ function thinkReg(r, dt) {
   if (!threat) r.morale += (r.routing ? 3 : 1.5) * dt;
   if (!h.dead) {
     const hd = d2(r.cx, r.cy, h.x, h.y);
-    if (r.side === 1 && hd < 180 * 180) r.morale -= 2.5 * dt;
+    if (r.side === 1 && hd < 180 * 180) r.morale -= 1 * dt;
     if (r.side === 0 && hd < 260 * 260) r.morale += dt;
   }
   r.morale = clamp(r.morale, 0, cap);
@@ -491,7 +491,7 @@ function hurt(t, amt, src, kx = 0, ky = 0) {
   if (t.reg.routing) m *= 1.5;
   if (tAt(G.T, t.x, t.y) === T_HILL && !(src && tAt(G.T, src.x, src.y) === T_HILL)) m *= 0.8;
   t.hp -= amt * m; t.flash = 0.1; t.kbx += kx; t.kby += ky;
-  if (src === G.hero) { G.hero.mu = Math.min(100, G.hero.mu + 1); G.comboT = 2.5; }
+  if (src === G.hero) { G.hero.mu = Math.min(100, G.hero.mu + 0.3); G.comboT = 2.5; }
   if (t.hp <= 0) kill(t, src);
 }
 
@@ -503,7 +503,7 @@ function kill(u, src) {
     for (const r of G.regs) if (r.side === 1) r.morale -= 45; else r.morale = Math.min(100, r.morale + 30);
   }
   if (src === G.hero) {
-    G.kills++; G.combo++; G.comboT = 2.5; G.hero.mu = Math.min(100, G.hero.mu + 2.5); reg.morale -= 0.5;
+    G.kills++; G.combo++; G.comboT = 2.5; G.hero.mu = Math.min(100, G.hero.mu + 0.8); reg.morale -= 0.5;
   }
   const c = G.terrCtx;
   c.fillStyle = 'rgba(90,14,10,.5)';
@@ -530,26 +530,30 @@ function separate() {
 // ================= 주장 =================
 const busy = (h) => h.dead || h.dashT > 0 || h.dodgeT > 0 || h.musouT > 0;
 
-function heroArc(rad, half, dmg, kb) {
-  const h = G.hero, a = G.grid.near(h.x, h.y, rad + 12, NB_B).slice();
-  let hits = 0;
+function heroArc(rad, half, dmg, kb, cap) {
+  const h = G.hero, a = G.grid.near(h.x, h.y, rad + 12, NB_B), hit = [];
   for (const u of a) {
     if (u.dead || u.side === 0) continue;
     const dx = u.x - h.x, dy = u.y - h.y, dd = dx * dx + dy * dy, rr = rad + u.r;
     if (dd > rr * rr) continue;
     if (half < Math.PI && Math.abs(angDiff(h.face, Math.atan2(dy, dx))) > half) continue;
-    const d = Math.sqrt(dd) || 1, v = dmg * h.atk * rand(0.9, 1.1);
-    hurt(u, v, h, dx / d * kb, dy / d * kb);
-    if (++hits <= 5) { floatText(u.x, u.y - 10, Math.round(v), '#ffe8a0'); G.fx.push({ k: 'spark', x: u.x + rand(-3, 3), y: u.y - 10 + rand(-3, 3), t: 0, dur: 0.16 }); }
+    hit.push([dd, u, dx, dy]);
   }
-  if (hits) G.shake = Math.max(G.shake, 2);
-  return hits;
+  hit.sort((p, q) => p[0] - q[0]);
+  const n = Math.min(hit.length, cap);
+  for (let i = 0; i < n; i++) {
+    const [dd, u, dx, dy] = hit[i], d = Math.sqrt(dd) || 1, v = dmg * h.atk * rand(0.9, 1.1);
+    hurt(u, v, h, dx / d * kb, dy / d * kb);
+    if (i < 5) { floatText(u.x, u.y - 10, Math.round(v), '#ffe8a0'); G.fx.push({ k: 'spark', x: u.x + rand(-3, 3), y: u.y - 10 + rand(-3, 3), t: 0, dur: 0.16 }); }
+  }
+  if (n) G.shake = Math.max(G.shake, 2);
+  return n;
 }
 function swing() {
   const h = G.hero, s = h.combo;
   h.combo = (s + 1) % 3; h.comboWin = 0.75; h.swingDur = h.swingT = s === 2 ? 0.34 : 0.24; h.swingDir = s === 1 ? -1 : 1;
   const rad = [64, 64, 80][s], half = [1.0, 1.0, 1.5][s];
-  heroArc(rad, half, [42, 42, 80][s], [50, 50, 200][s]);
+  heroArc(rad, half, [34, 34, 60][s], [50, 50, 200][s], [4, 4, 7][s]);
   G.fx.push({ k: 'slash', x: h.x, y: h.y, a: h.face, r: rad, half, t: 0, dur: 0.22, big: s === 2, dir: h.swingDir });
 }
 function attackPress() {
@@ -562,7 +566,7 @@ function chargeStart() { const h = G.hero; if (!busy(h) && h.swingT <= 0) { h.ch
 function chargeRelease() {
   const h = G.hero; if (!h.charging) return;
   h.charging = false; const c = h.charge;
-  heroArc(70 + 70 * c, Math.PI + 0.01, 60 + 170 * c, 120 + 200 * c);
+  heroArc(70 + 70 * c, Math.PI + 0.01, 50 + 120 * c, 120 + 200 * c, 4 + Math.round(8 * c));
   G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 20, r1: 70 + 70 * c, t: 0, dur: 0.3, c: '#ffe08c', c2: '#e09040' });
   G.shake = Math.max(G.shake, 3 + 6 * c); h.swingT = h.swingDur = 0.3;
 }
@@ -573,16 +577,17 @@ function dash() {
 function dashHits() {
   const h = G.hero, a = G.grid.near(h.x, h.y, 36, NB_B).slice(), px = -Math.sin(h.face), py = Math.cos(h.face);
   for (const u of a) {
+    if (h.dashSet.size >= 8) break;
     if (u.dead || u.side === 0 || h.dashSet.has(u) || d2(u.x, u.y, h.x, h.y) > (30 + u.r) ** 2) continue;
     h.dashSet.add(u);
-    const s = (u.x - h.x) * px + (u.y - h.y) * py >= 0 ? 1 : -1, v = 95 * h.atk;
+    const s = (u.x - h.x) * px + (u.y - h.y) * py >= 0 ? 1 : -1, v = 70 * h.atk;
     hurt(u, v, h, px * s * 140, py * s * 140); floatText(u.x, u.y - 10, Math.round(v), '#ffe8a0');
   }
 }
 function slam() {
   const h = G.hero; if (busy(h) || h.cd.e > 0) return;
   h.cd.e = 8; h.charging = false;
-  heroArc(125, Math.PI + 0.01, 105, 230);
+  heroArc(125, Math.PI + 0.01, 80, 230, 12);
   G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 10, r1: 130, t: 0, dur: 0.35, c: '#e6c896', c2: '#8a6a40' });
   G.shake = 8;
 }
@@ -653,8 +658,8 @@ function updHero(dt) {
   if (h.charging) h.charge = Math.min(1, h.charge + dt * 0.9);
   if (h.musouT > 0) {
     h.musouT -= dt; h.inv = 0.1; h.face += dt * 14; h.musouTick -= dt;
-    if (h.musouTick <= 0) { h.musouTick = 0.12; heroArc(150, Math.PI + 0.01, 55, 90); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 40, r1: 150, t: 0, dur: 0.2, c: '#ffaa3c', c2: '#d05020' }); }
-    if (h.musouT <= 0) { heroArc(230, Math.PI + 0.01, 260, 320); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 30, r1: 240, t: 0, dur: 0.5, c: '#fff0c8', c2: '#ffaa3c' }); G.shake = 12; }
+    if (h.musouTick <= 0) { h.musouTick = 0.12; heroArc(150, Math.PI + 0.01, 38, 90, 8); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 40, r1: 150, t: 0, dur: 0.2, c: '#ffaa3c', c2: '#d05020' }); }
+    if (h.musouT <= 0) { heroArc(230, Math.PI + 0.01, 150, 320, 20); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 30, r1: 240, t: 0, dur: 0.5, c: '#fff0c8', c2: '#ffaa3c' }); G.shake = 12; }
   }
   if ((h.mu >= 100 || h.musouT > 0) && Math.random() < dt * (h.musouT > 0 ? 60 : 18)) {
     G.fx.push({ k: 'ember', x: h.x + rand(-10, 10), y: h.y + rand(-6, 2), vx: rand(-8, 8), vy: -rand(30, 60), t: 0, dur: rand(0.4, 0.8) });

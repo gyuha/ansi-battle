@@ -6,14 +6,14 @@ const UNIT_TYPES = {
   archer:  { name: '궁병',     glyph: '궁', hp: 45,   atk: 7,  range: 250, speed: 54,  cd: 2.4, r: 5.5, armor: 0,   ranged: true },
   cav:     { name: '기병',     glyph: '기', hp: 110,  atk: 12, range: 16,  speed: 105, cd: 1.2, r: 8,   armor: 0.2, cav: true, sp: 20 },
   guard:   { name: '친위대',   glyph: '위', hp: 160,  atk: 14, range: 16,  speed: 62,  cd: 0.9, r: 6.5, armor: 0.35 },
-  general: { name: '적장',     glyph: '장', hp: 2600, atk: 40, range: 24,  speed: 64,  cd: 1.0, r: 11,  armor: 0.4, sp: 20 },
+  general: { name: '적장',     glyph: '장', hp: 4200, atk: 55, range: 24,  speed: 64,  cd: 1.0, r: 11,  armor: 0.4, sp: 20 },
 };
 
 const BATTLES = [
   {
     id: 'salsu', mode: 'tactical', name: '살수대첩', year: 612, place: '살수(청천강 추정)',
     sides: ['고구려', '수'], heroName: '을지문덕',
-    heroHp: 2400, heroAtk: 1.2, heroDef: 0.45, timeLimit: 600,
+    heroHp: 2400, heroAtk: 1.0, heroDef: 0.55, timeLimit: 600,
     enemyMul: { hp: 1, atk: 0.9 },
     objective: '도하하는 수군을 강가에서 막아 내고 적군을 무너뜨려라',
     hist: {
@@ -74,7 +74,7 @@ const BATTLES = [
   {
     id: 'hwangsan', mode: 'tactical', name: '황산벌 전투', year: 660, place: '황산벌(논산 연산 일대)',
     sides: ['백제', '신라'], heroName: '계백',
-    heroHp: 2600, heroAtk: 1.2, heroDef: 0.45, timeLimit: 600,
+    heroHp: 2600, heroAtk: 1.0, heroDef: 0.55, timeLimit: 600,
     enemyMul: { hp: 1, atk: 1 },
     objective: '세 군영을 지키며 열 배의 신라군을 꺾어라',
     hist: {
@@ -132,7 +132,7 @@ const BATTLES = [
   {
     id: 'gwiju', mode: 'tactical', name: '귀주대첩', year: 1019, place: '귀주(평안북도 구성)',
     sides: ['고려', '거란'], heroName: '강감찬',
-    heroHp: 2400, heroAtk: 1.2, heroDef: 0.45, timeLimit: 600,
+    heroHp: 2400, heroAtk: 1.0, heroDef: 0.55, timeLimit: 600,
     enemyMul: { hp: 1, atk: 1 },
     objective: '거란 기병을 받아 내고, 남풍이 불면 총공세로 무너뜨려라',
     hist: {
@@ -190,8 +190,8 @@ const BATTLES = [
   {
     id: 'ansi', mode: 'musou', name: '안시성 출격', year: 645, place: '안시성(요동)',
     sides: ['고구려', '당'], heroName: '안시성주',
-    heroHp: 6000, heroAtk: 1.6, heroDef: 0.3, heroMu: 50, timeLimit: 480,
-    enemyMul: { hp: 0.8, atk: 0.8 },
+    heroHp: 5000, heroAtk: 1.2, heroDef: 0.5, heroMu: 50, timeLimit: 480,
+    enemyMul: { hp: 1, atk: 1.1 },
     objective: '토산의 당군을 쓸어 내고 적장을 베어라',
     hist: {
       era: '645년, 고구려 보장왕 4년',
