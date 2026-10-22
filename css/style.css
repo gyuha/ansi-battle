@@ -111,6 +111,8 @@ kbd { font-family: inherit; color: var(--gold2); font-size: 11px; margin-left: 4
 .card.sel { border-color: var(--gold2); box-shadow: 0 0 0 1px var(--gold2), 0 0 12px rgba(240,210,122,.45); background: rgba(60,40,18,.95); }
 .card.ai::after { content: '자율'; position: absolute; top: 2px; right: 3px; font-size: 9px; padding: 0 3px; background: #2c5a6a; color: #d8f4ff; }
 .card.rout { border-color: #888; }
+.card.unled { border-color: #d0702a; }
+.card.unled .st { color: #ff9a5a; }
 .card.dead { opacity: .35; filter: grayscale(1); }
 #mmwrap { right: 12px; bottom: 12px; padding: 5px; }
 #minimap { display: block; }

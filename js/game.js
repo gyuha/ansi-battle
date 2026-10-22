@@ -22,6 +22,8 @@ const FORM_FX = {
   free: { def: 1, atk: 1 }, rect: { def: 0.8, atk: 1 }, circle: { def: 0.9, rng: 0.65, atk: 0.95 }, wedge: { def: 1.15, atk: 1.25 },
   snake: { def: 1.1, atk: 0.8 }, hollow: { def: 0.9, atk: 0.9 },
 };
+// 지휘 범위: 주장 곁(이 거리 안)의 아군 부대만 제 능력을 낸다. 부장 부대는 항상 범위 안으로 본다
+const LEAD_R = 320;
 const SAVE_KEY = 'banners-of-war.save.v1';
 
 const save = (() => { try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch { return {}; } })();
@@ -268,7 +270,7 @@ function addReg(d, side, isGeneral = false) {
   const face = side ? (G.b.enemy.face ?? Math.PI) : (G.b.player.face || 0);
   const r = {
     id: G.regId++, side, tk: d.type, type: t, name: d.name || t.name, units: [], init: count, alive: count,
-    morale: 100, routing: false, lt: !!d.lt, wait: d.wait || 0, formation: d.formation || 'free',
+    morale: 100, led: true, routing: false, lt: !!d.lt, wait: d.wait || 0, formation: d.formation || 'free',
     home: { x: d.x, y: d.y }, face, cx: d.x, cy: d.y, ax: d.x, ay: d.y, mode: 'idle', buffT: 0,
     isGeneral, dead: false, target: null, el: null,
     num: side === 0 ? G.regs.filter((x) => x.side === 0).length + 1 : 0,
@@ -362,6 +364,8 @@ function thinkReg(r, dt) {
 
   // 사기: 손실이 클수록 회복 상한이 낮아진다
   const cap = 35 + 65 * n / r.init, h = G.hero;
+  r.led = r.side === 1 || r.lt || (!h.dead && d2(r.cx, r.cy, h.x, h.y) < LEAD_R * LEAD_R);
+  if (!r.led) r.morale -= 1.2 * dt;
   const threat = nearestEnemy(r.cx, r.cy, r.side, 220);
   if (!threat) r.morale += (r.routing ? 3 : 1.5) * dt;
   if (!h.dead) {
@@ -468,7 +472,7 @@ function updUnit(u, dt) {
 function strike(u, e, mul = 1) {
   const t = u.type;
   u.cd = t.cd * rand(0.85, 1.15); u.atkA = 0.18;
-  let dmg = t.atk * u.atkMul * mul * (u.reg.buffT > 0 ? 1.3 : 1) * FORM_FX[u.reg.formation].atk;
+  let dmg = t.atk * u.atkMul * mul * (u.reg.buffT > 0 ? 1.3 : 1) * FORM_FX[u.reg.formation].atk * (u.reg.led ? 1 : 0.7);
   if (e.type && e.type.cav && t.vsCav) dmg *= t.vsCav;
   if (e.reg && !e.reg.routing) {
     // 상대가 바라보는 방향의 뒤쪽·옆에서 칠수록 피해가 커진다
@@ -484,7 +488,7 @@ function strike(u, e, mul = 1) {
 function shoot(u, e) {
   const t = u.type, d = Math.sqrt(d2(u.x, u.y, e.x, e.y)), spread = d * 0.06;
   u.cd = t.cd * rand(0.85, 1.2); u.atkA = 0.25; u.face = Math.atan2(e.y - u.y, e.x - u.x);
-  const dmg = t.atk * u.atkMul * (u.reg.buffT > 0 ? 1.3 : 1) * (u.side === 0 && G.wind ? 1.4 : 1);
+  const dmg = t.atk * u.atkMul * (u.reg.buffT > 0 ? 1.3 : 1) * (u.side === 0 && G.wind ? 1.4 : 1) * (u.reg.led ? 1 : 0.7);
   G.proj.push({ x0: u.x, y0: u.y, x1: e.x + rand(-spread, spread), y1: e.y + rand(-spread, spread), t: 0, dur: Math.max(0.25, d / 380), side: u.side, dmg, src: u });
 }
 
@@ -503,6 +507,7 @@ function hurt(t, amt, src, kx = 0, ky = 0) {
   if (fx.rng && src && src.type && src.type.ranged) m *= fx.rng;
   // 플레이어가 고수 명령을 내려 진지를 지키는 부대는 받는 피해가 줄어든다 (처음 배치에는 적용되지 않는다)
   if (t.reg.order.dug && !t.reg.routing) m *= 0.7;
+  if (!t.reg.led) m *= 1.25;
   if (t.reg.routing) m *= 1.5;
   if (tAt(G.T, t.x, t.y) === T_HILL && !(src && tAt(G.T, src.x, src.y) === T_HILL)) m *= 0.7;
   t.hp -= amt * m; t.flash = 0.1; t.kbx += kx; t.kby += ky;
@@ -785,17 +790,9 @@ function update(dt) {
 
 function checkEnd() {
   if (G.over) return;
-  const en = G.regs.filter((r) => r.side === 1 && !r.dead), pl = playerRegs();
-  const pending = (G.b.events || []).some((ev) => ev.regs && !G.done.has(ev));
-  if (G.generalDead && G.b.mode === 'musou') return endBattle(true, '적장을 베었다');
-  // 적장은 사기가 꺾이지 않으므로, 그 외 적 부대가 모두 무너지면 승리한다
-  if (!pending && en.every((r) => r.routing || r.isGeneral)) return endBattle(true, G.generalDead ? '적장을 베고 적군을 무너뜨렸다' : '적군이 모두 무너졌다');
-  // 패주한 부대는 사기를 되찾아 돌아오므로, 싸울 수 있는 적이 20% 미만으로 줄어도 와해된 것으로 본다
-  if (!pending && G.b.mode !== 'musou' && (G.frame & 15) === 0) {
-    let active = 0;
-    for (const u of G.units) if (!u.dead && u.side === 1 && !u.reg.routing && !u.reg.isGeneral) active++;
-    if (active < G.init[1] * 0.2) return endBattle(true, '적군이 와해되었다');
-  }
+  const pl = playerRegs();
+  // 승리는 적장을 베는 것뿐이다. 패주한 적은 사기를 되찾아 돌아오므로 병력을 꺾는 것만으로는 끝나지 않는다
+  if (G.generalDead) return endBattle(true, '적장을 베었다');
   if (G.b.mode !== 'musou' && pl.every((r) => r.routing)) return endBattle(false, '아군이 모두 무너졌다');
   if (G.t >= G.b.timeLimit) endBattle(false, '제한 시간이 다 되었다');
 }
@@ -913,6 +910,7 @@ function drawArrow(c, p) {
 function drawHero(c) {
   const h = G.hero; if (h.dead) return;
   const x = h.x, y = h.y, dir = dirOf(h.face);
+  c.globalAlpha = 0.35; pxArc(c, x, y, LEAD_R, 0, TAU, '#ffd25a', 4); c.globalAlpha = 1;
   if (h.charging) {
     const col = h.charge >= 1 ? '#fff0a0' : '#ffc860';
     pxArc(c, x, y, 70 + 70 * h.charge, G.t * 2, G.t * 2 + TAU, col, 3);
@@ -1051,6 +1049,7 @@ function buildHud() {
 function regStatus(r) {
   if (r.dead) return '전멸';
   if (r.routing) return '패주';
+  if (!r.led) return '지휘밖';
   if (r.mode === 'fight') return r.order.k === 'charge' ? '돌격' : '교전';
   if (r.mode === 'march') return '행군';
   return { hold: '고수', follow: '수행', auto: '자율', move: '이동', attack: '공격', charge: '돌격' }[r.order.k] || '대기';
@@ -1081,6 +1080,7 @@ function updHud() {
     el.classList.toggle('sel', G.sel.has(r.id));
     el.classList.toggle('ai', r.order.k === 'auto');
     el.classList.toggle('rout', r.routing); el.classList.toggle('dead', r.dead);
+    el.classList.toggle('unled', !r.led && !r.routing && !r.dead);
     el.querySelector('.hp i').style.width = (r.alive / r.init * 100) + '%';
     el.querySelector('.mo i').style.width = r.morale + '%';
     el.querySelector('.st').textContent = `${Math.max(0, r.alive)}명 · ${regStatus(r)}`;

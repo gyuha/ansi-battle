@@ -14,8 +14,8 @@ const BATTLES = [
     id: 'salsu', mode: 'tactical', name: '살수대첩', year: 612, place: '살수(청천강 추정)',
     sides: ['고구려', '수'], heroName: '을지문덕',
     heroHp: 1400, heroAtk: 1.0, heroDef: 0.8, timeLimit: 600,
-    enemyMul: { hp: 0.8, atk: 0.9 },
-    objective: '도하하는 수군을 강가에서 막아 내고 적군을 무너뜨려라',
+    enemyMul: { hp: 0.5, atk: 0.65 },
+    objective: '도하하는 수군을 강가에서 막아 낸 뒤, 적장 우중문을 베어라',
     hist: {
       era: '612년, 고구려 영양왕 23년',
       sides: '고구려 을지문덕 vs 수 우중문·우문술의 별동대',
@@ -75,8 +75,8 @@ const BATTLES = [
     id: 'hwangsan', mode: 'tactical', name: '황산벌 전투', year: 660, place: '황산벌(논산 연산 일대)',
     sides: ['백제', '신라'], heroName: '계백',
     heroHp: 1500, heroAtk: 1.0, heroDef: 0.8, timeLimit: 600,
-    enemyMul: { hp: 1, atk: 1 },
-    objective: '세 군영을 지키며 열 배의 신라군을 꺾어라',
+    enemyMul: { hp: 0.6, atk: 0.7 },
+    objective: '세 군영을 지키며 신라군을 꺾고, 적장 김유신을 베어라',
     hist: {
       era: '660년, 백제 의자왕 20년',
       sides: '백제 계백의 결사대 vs 신라 김유신의 대군',
@@ -133,8 +133,8 @@ const BATTLES = [
     id: 'gwiju', mode: 'tactical', name: '귀주대첩', year: 1019, place: '귀주(평안북도 구성)',
     sides: ['고려', '거란'], heroName: '강감찬',
     heroHp: 1400, heroAtk: 1.0, heroDef: 0.8, timeLimit: 600,
-    enemyMul: { hp: 0.9, atk: 1 },
-    objective: '거란 기병을 받아 내고, 남풍이 불면 총공세로 무너뜨려라',
+    enemyMul: { hp: 0.7, atk: 0.85 },
+    objective: '거란 기병을 받아 내고, 남풍이 불면 총공세로 적장 소배압을 베어라',
     hist: {
       era: '1019년 2월, 고려 현종 10년',
       sides: '고려 강감찬 vs 거란(요) 소배압',
