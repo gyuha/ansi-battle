@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="icon" href="data:,">
+<title>전장의 깃발 | 역사 전투</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div class="vign"></div>
+
+<div id="menu" class="screen show">
+  <header class="mh">
+    <div class="logo">戰</div>
+    <div class="mt"><h1>전장의 깃발</h1><small>역사 전투 체험판</small></div>
+    <div class="sp"></div>
+    <button id="btn-help-menu" class="small">조작법</button>
+  </header>
+  <div class="mbody">
+    <aside id="blist" class="frame">
+      <div class="tabs"><button data-mode="tactical" class="on">사실 전술전</button><button data-mode="musou">영웅 무쌍전</button></div>
+      <div id="bitems"></div>
+    </aside>
+    <section id="bdetail" class="frame">
+      <div class="ttlbar"><span id="bd-tag"></span><h2 id="bd-name"></h2><div class="sub"><span id="bd-sub"></span><span id="bd-sides"></span></div></div>
+      <canvas id="bd-map" width="640" height="400"></canvas>
+      <div id="bd-armies"></div>
+    </section>
+    <aside id="bhist" class="frame">
+      <h3>역사 배경</h3>
+      <div id="bd-hist"></div>
+      <div id="bd-ach"></div>
+      <button id="btn-start" class="primary">출 정</button>
+    </aside>
+  </div>
+  <footer>WASD 이동 · 좌클릭 연참 · 우클릭 모아베기 · Q/E/R 전기 · T 무쌍 · Tab 전술 지도 · F1 도움말</footer>
+</div>
+
+<div id="hud">
+  <div id="topbar" class="frame">
+    <div class="side me"><div class="lbl"><span>아군</span><span id="s-me">0</span></div><div class="bar"><i id="b-me"></i></div></div>
+    <div id="t-time">00:00</div>
+    <div class="side en"><div class="lbl"><span id="s-en">0</span><span>적군</span></div><div class="bar"><i id="b-en"></i></div></div>
+  </div>
+  <div id="objective" class="frame"></div>
+  <div id="log"></div>
+  <div id="hudbtns">
+    <button id="btn-tac" class="small">전술 지도 <kbd>Tab</kbd></button>
+    <button id="btn-speed" class="small">전투 속도 1×</button>
+    <button id="btn-pause" class="small">일시정지 <kbd>Esc</kbd></button>
+  </div>
+  <div id="heropanel" class="frame">
+    <canvas id="portrait" width="72" height="72"></canvas>
+    <div class="hs">
+      <div class="name"><span id="hero-nm"></span></div>
+      <div class="gauge hp"><i id="hp-fill"></i><span id="hp-txt"></span></div>
+      <div class="gauge mu"><i id="mu-fill"></i><span>무쌍</span></div>
+      <div class="gauge st"><i id="st-fill"></i></div>
+    </div>
+  </div>
+  <div id="skills">
+    <div class="sk" id="sk-q"><em>Q</em><b>돌진참</b><i class="cd"></i></div>
+    <div class="sk" id="sk-e"><em>E</em><b>진각</b><i class="cd"></i></div>
+    <div class="sk" id="sk-r"><em>R</em><b>함성</b><i class="cd"></i></div>
+    <div class="sk" id="sk-t"><em>T</em><b>무쌍</b><i class="cd"></i></div>
+    <div class="sk" id="sk-sp"><em>Space</em><b>회피</b><i class="cd"></i></div>
+  </div>
+  <div id="orders" class="frame">
+    <span id="ord-who">지휘: 본진 전체</span>
+    <button class="o" data-c="follow"><b>C</b>열진 전진</button>
+    <button class="o" data-c="attack"><b>V</b>공격</button>
+    <button class="o" data-c="charge"><b>Z</b>돌격</button>
+    <button class="o" data-c="hold"><b>X</b>고수</button>
+    <button class="o" data-c="auto"><b>B</b>자율</button>
+    <span class="sep"></span>
+    <button class="o f" data-f="rect"><b>F</b>방진</button>
+    <button class="o f" data-f="circle"><b>G</b>원진</button>
+    <button class="o f" data-f="wedge"><b>H</b>쐐기진</button>
+    <button class="o f" data-f="snake"><b>[</b>장사진</button>
+    <button class="o f" data-f="hollow"><b>]</b>공심진</button>
+  </div>
+  <div id="regs"></div>
+  <div id="mmwrap" class="frame"><canvas id="minimap"></canvas></div>
+  <div id="killbox">
+    <div class="k">격파 <b id="kills">0</b></div>
+    <div id="combo"><b id="combo-n">0</b> 연격</div>
+  </div>
+  <div id="tachint">전술 지도 — 좌클릭: 부대 선택(Shift 추가) · 우클릭: 이동/공격 명령 · Tab: 닫기</div>
+</div>
+
+<div id="banner"></div>
+
+<div id="pause" class="screen">
+  <div class="box frame">
+    <div class="ptitle">일시정지</div>
+    <div class="btns"><button id="btn-resume">계속</button><button id="btn-help2">조작법</button><button id="btn-quit">철수</button></div>
+  </div>
+</div>
+
+<div id="result" class="screen">
+  <div class="box frame">
+    <div id="res-title"></div>
+    <div id="res-reason"></div>
+    <div id="res-body"></div>
+    <div id="res-ach"></div>
+    <div class="btns"><button id="btn-retry">다시 도전</button><button id="btn-menu">전투 선택</button></div>
+  </div>
+</div>
+
+<div id="help" class="frame">
+  <h3>조작법</h3>
+  <div class="hcols">
+    <div>
+      <p><b>WASD</b> 이동 / <b>Shift</b> 질주</p>
+      <p><b>좌클릭</b> 3단 연참 (셋째 타격은 날려 보냄, 누르고 있으면 연속)</p>
+      <p><b>우클릭 유지</b> 모아베기 — 오래 모을수록 강함</p>
+      <p><b>Q</b> 돌진참: 적진을 꿰뚫음</p>
+      <p><b>E</b> 진각: 주변 적을 날려 보냄</p>
+      <p><b>R</b> 함성: 주변 아군 사기 회복·공격력 상승·패주 부대 재집결</p>
+      <p><b>T</b> 무쌍 (게이지 100)</p>
+      <p><b>Space</b> 회피 (무적)</p>
+    </div>
+    <div>
+      <p><b>1–9</b> 부대 선택 (Shift 추가) / <b>`</b>·<b>0</b> 선택 해제</p>
+      <p>선택이 없으면 부장 부대를 뺀 본진 전체에 명령</p>
+      <p><b>C</b> 주장을 따라 열진 전진</p>
+      <p><b>V</b> 커서의 적 부대 공격 (땅을 가리키면 그곳으로 이동)</p>
+      <p><b>Z</b> 돌격 &nbsp; <b>X</b> 커서 위치 고수 &nbsp; <b>B</b> 자율 지휘 전환</p>
+      <p><b>F/G/H/[/]</b> 방진/원진/쐐기진/장사진/공심진</p>
+      <p><b>Tab</b> 전술 지도 &nbsp; <b>휠</b> 확대/축소 &nbsp; <b>Esc</b> 일시정지</p>
+    </div>
+  </div>
+  <div class="btns"><button id="btn-help-close" class="small">닫기 (F1)</button></div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
