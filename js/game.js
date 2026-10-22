@@ -17,6 +17,11 @@ const PAL = [
   { flag: '#2a4ea8', mm: '#6aa0ff' },
 ];
 const FORMS = { rect: '방진', circle: '원진', wedge: '쐐기진', snake: '장사진', hollow: '공심진' };
+// 진형 효과: def 받는 피해 배율, rng 원거리 피해에 추가로 곱하는 배율, atk 근접 공격력 배율
+const FORM_FX = {
+  rect: { def: 0.85, atk: 1 }, circle: { def: 0.9, rng: 0.65, atk: 0.95 }, wedge: { def: 1.15, atk: 1.25 },
+  snake: { def: 1.1, atk: 0.8 }, hollow: { def: 0.9, atk: 0.9 },
+};
 const SAVE_KEY = 'banners-of-war.save.v1';
 
 const save = (() => { try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch { return {}; } })();
@@ -463,8 +468,13 @@ function updUnit(u, dt) {
 function strike(u, e, mul = 1) {
   const t = u.type;
   u.cd = t.cd * rand(0.85, 1.15); u.atkA = 0.18;
-  let dmg = t.atk * u.atkMul * mul * (u.reg.buffT > 0 ? 1.3 : 1);
+  let dmg = t.atk * u.atkMul * mul * (u.reg.buffT > 0 ? 1.3 : 1) * FORM_FX[u.reg.formation].atk;
   if (e.type && e.type.cav && t.vsCav) dmg *= t.vsCav;
+  if (e.reg && !e.reg.routing) {
+    // 상대가 바라보는 방향의 뒤쪽·옆에서 칠수록 피해가 커진다
+    const off = Math.abs(angDiff(e.face, Math.atan2(u.y - e.y, u.x - e.x)));
+    if (off > 2.2) dmg *= 1.5; else if (off > 1.3) dmg *= 1.2;
+  }
   const charging = t.cav && u.mom > t.speed * 0.6;
   if (charging) { dmg *= 2.2; if (e.tk === 'spear') hurt(u, 14, e); }
   const a = Math.atan2(e.y - u.y, e.x - u.x), kb = charging ? 90 : 12;
@@ -488,6 +498,11 @@ function hurt(t, amt, src, kx = 0, ky = 0) {
     return;
   }
   let m = 1 - t.type.armor;
+  const fx = FORM_FX[t.reg.formation];
+  m *= fx.def;
+  if (fx.rng && src && src.type && src.type.ranged) m *= fx.rng;
+  // 고수 명령으로 진지를 지키는 부대는 받는 피해가 줄어든다
+  if (t.reg.order.k === 'hold' && !t.reg.routing) m *= 0.8;
   if (t.reg.routing) m *= 1.5;
   if (tAt(G.T, t.x, t.y) === T_HILL && !(src && tAt(G.T, src.x, src.y) === T_HILL)) m *= 0.8;
   t.hp -= amt * m; t.flash = 0.1; t.kbx += kx; t.kby += ky;
@@ -541,19 +556,23 @@ function heroArc(rad, half, dmg, kb, cap) {
   }
   hit.sort((p, q) => p[0] - q[0]);
   const n = Math.min(hit.length, cap);
-  for (let i = 0; i < n; i++) {
-    const [dd, u, dx, dy] = hit[i], d = Math.sqrt(dd) || 1, v = dmg * h.atk * rand(0.9, 1.1);
-    hurt(u, v, h, dx / d * kb, dy / d * kb);
-    if (i < 5) { floatText(u.x, u.y - 10, Math.round(v), '#ffe8a0'); G.fx.push({ k: 'spark', x: u.x + rand(-3, 3), y: u.y - 10 + rand(-3, 3), t: 0, dur: 0.16 }); }
+  // 피해는 가까운 cap 명에게만, 넉백은 범위 안의 모두에게 준다
+  for (let i = 0; i < hit.length; i++) {
+    const [dd, u, dx, dy] = hit[i], d = Math.sqrt(dd) || 1;
+    if (i < n) {
+      const v = dmg * h.atk * rand(0.9, 1.1);
+      hurt(u, v, h, dx / d * kb, dy / d * kb);
+      if (i < 5) { floatText(u.x, u.y - 10, Math.round(v), '#ffe8a0'); G.fx.push({ k: 'spark', x: u.x + rand(-3, 3), y: u.y - 10 + rand(-3, 3), t: 0, dur: 0.16 }); }
+    } else if (!u.dead) { u.kbx += dx / d * kb; u.kby += dy / d * kb; }
   }
-  if (n) G.shake = Math.max(G.shake, 2);
+  if (hit.length) G.shake = Math.max(G.shake, 2);
   return n;
 }
 function swing() {
   const h = G.hero, s = h.combo;
   h.combo = (s + 1) % 3; h.comboWin = 0.75; h.swingDur = h.swingT = s === 2 ? 0.34 : 0.24; h.swingDir = s === 1 ? -1 : 1;
   const rad = [64, 64, 80][s], half = [1.0, 1.0, 1.5][s];
-  heroArc(rad, half, [34, 34, 60][s], [50, 50, 200][s], [4, 4, 7][s]);
+  heroArc(rad, half, [24, 24, 40][s], [50, 50, 200][s], [2, 2, 3][s]);
   G.fx.push({ k: 'slash', x: h.x, y: h.y, a: h.face, r: rad, half, t: 0, dur: 0.22, big: s === 2, dir: h.swingDir });
 }
 function attackPress() {
@@ -566,7 +585,7 @@ function chargeStart() { const h = G.hero; if (!busy(h) && h.swingT <= 0) { h.ch
 function chargeRelease() {
   const h = G.hero; if (!h.charging) return;
   h.charging = false; const c = h.charge;
-  heroArc(70 + 70 * c, Math.PI + 0.01, 50 + 120 * c, 120 + 200 * c, 4 + Math.round(8 * c));
+  heroArc(70 + 70 * c, Math.PI + 0.01, 36 + 80 * c, 120 + 200 * c, 2 + Math.round(3 * c));
   G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 20, r1: 70 + 70 * c, t: 0, dur: 0.3, c: '#ffe08c', c2: '#e09040' });
   G.shake = Math.max(G.shake, 3 + 6 * c); h.swingT = h.swingDur = 0.3;
 }
@@ -577,17 +596,18 @@ function dash() {
 function dashHits() {
   const h = G.hero, a = G.grid.near(h.x, h.y, 36, NB_B).slice(), px = -Math.sin(h.face), py = Math.cos(h.face);
   for (const u of a) {
-    if (h.dashSet.size >= 8) break;
     if (u.dead || u.side === 0 || h.dashSet.has(u) || d2(u.x, u.y, h.x, h.y) > (30 + u.r) ** 2) continue;
+    // 지나가며 닿은 모두를 옆으로 밀어내고, 피해는 처음 3명에게만 준다
+    const s = (u.x - h.x) * px + (u.y - h.y) * py >= 0 ? 1 : -1, damaged = h.dashSet.size < 3;
     h.dashSet.add(u);
-    const s = (u.x - h.x) * px + (u.y - h.y) * py >= 0 ? 1 : -1, v = 70 * h.atk;
-    hurt(u, v, h, px * s * 140, py * s * 140); floatText(u.x, u.y - 10, Math.round(v), '#ffe8a0');
+    if (damaged) { const v = 50 * h.atk; hurt(u, v, h, px * s * 140, py * s * 140); floatText(u.x, u.y - 10, Math.round(v), '#ffe8a0'); }
+    else { u.kbx += px * s * 140; u.kby += py * s * 140; }
   }
 }
 function slam() {
   const h = G.hero; if (busy(h) || h.cd.e > 0) return;
   h.cd.e = 8; h.charging = false;
-  heroArc(125, Math.PI + 0.01, 80, 230, 12);
+  heroArc(125, Math.PI + 0.01, 55, 230, 5);
   G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 10, r1: 130, t: 0, dur: 0.35, c: '#e6c896', c2: '#8a6a40' });
   G.shake = 8;
 }
@@ -658,8 +678,8 @@ function updHero(dt) {
   if (h.charging) h.charge = Math.min(1, h.charge + dt * 0.9);
   if (h.musouT > 0) {
     h.musouT -= dt; h.inv = 0.1; h.face += dt * 14; h.musouTick -= dt;
-    if (h.musouTick <= 0) { h.musouTick = 0.12; heroArc(150, Math.PI + 0.01, 38, 90, 8); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 40, r1: 150, t: 0, dur: 0.2, c: '#ffaa3c', c2: '#d05020' }); }
-    if (h.musouT <= 0) { heroArc(230, Math.PI + 0.01, 150, 320, 20); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 30, r1: 240, t: 0, dur: 0.5, c: '#fff0c8', c2: '#ffaa3c' }); G.shake = 12; }
+    if (h.musouTick <= 0) { h.musouTick = 0.12; heroArc(150, Math.PI + 0.01, 30, 90, 6); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 40, r1: 150, t: 0, dur: 0.2, c: '#ffaa3c', c2: '#d05020' }); }
+    if (h.musouT <= 0) { heroArc(230, Math.PI + 0.01, 100, 320, 10); G.fx.push({ k: 'ring', x: h.x, y: h.y, r0: 30, r1: 240, t: 0, dur: 0.5, c: '#fff0c8', c2: '#ffaa3c' }); G.shake = 12; }
   }
   if ((h.mu >= 100 || h.musouT > 0) && Math.random() < dt * (h.musouT > 0 ? 60 : 18)) {
     G.fx.push({ k: 'ember', x: h.x + rand(-10, 10), y: h.y + rand(-6, 2), vx: rand(-8, 8), vy: -rand(30, 60), t: 0, dur: rand(0.4, 0.8) });
@@ -768,7 +788,14 @@ function checkEnd() {
   const en = G.regs.filter((r) => r.side === 1 && !r.dead), pl = playerRegs();
   const pending = (G.b.events || []).some((ev) => ev.regs && !G.done.has(ev));
   if (G.generalDead && G.b.mode === 'musou') return endBattle(true, '적장을 베었다');
-  if (!pending && en.every((r) => r.routing)) return endBattle(true, G.generalDead ? '적장을 베고 적군을 무너뜨렸다' : '적군이 모두 무너졌다');
+  // 적장은 사기가 꺾이지 않으므로, 그 외 적 부대가 모두 무너지면 승리한다
+  if (!pending && en.every((r) => r.routing || r.isGeneral)) return endBattle(true, G.generalDead ? '적장을 베고 적군을 무너뜨렸다' : '적군이 모두 무너졌다');
+  // 패주한 부대는 사기를 되찾아 돌아오므로, 싸울 수 있는 적이 20% 미만으로 줄어도 와해된 것으로 본다
+  if (!pending && G.b.mode !== 'musou' && (G.frame & 15) === 0) {
+    let active = 0;
+    for (const u of G.units) if (!u.dead && u.side === 1 && !u.reg.routing && !u.reg.isGeneral) active++;
+    if (active < G.init[1] * 0.2) return endBattle(true, '적군이 와해되었다');
+  }
   if (G.b.mode !== 'musou' && pl.every((r) => r.routing)) return endBattle(false, '아군이 모두 무너졌다');
   if (G.t >= G.b.timeLimit) endBattle(false, '제한 시간이 다 되었다');
 }
