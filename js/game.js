@@ -19,16 +19,16 @@ const PAL = [
 const FORMS = { rect: '방진', circle: '원진', wedge: '쐐기진', snake: '장사진', hollow: '공심진' };
 // 진형 효과: def 받는 피해 배율, rng 원거리 피해에 추가로 곱하는 배율, atk 근접 공격력 배율
 const FORM_FX = {
-  rect: { def: 0.85, atk: 1 }, circle: { def: 0.9, rng: 0.65, atk: 0.95 }, wedge: { def: 1.15, atk: 1.25 },
+  free: { def: 1, atk: 1 }, rect: { def: 0.8, atk: 1 }, circle: { def: 0.9, rng: 0.65, atk: 0.95 }, wedge: { def: 1.15, atk: 1.25 },
   snake: { def: 1.1, atk: 0.8 }, hollow: { def: 0.9, atk: 0.9 },
 };
 const SAVE_KEY = 'banners-of-war.save.v1';
 
 const save = (() => { try { return JSON.parse(localStorage.getItem(SAVE_KEY)) || {}; } catch { return {}; } })();
 save.ach = save.ach || {};
-save.scale = save.scale === 5 ? 5 : 1;
 // 출전 규모 배율: 일반 부대 병력에만 적용하고 적장(1명)은 그대로 둔다
-const SCALES = [1, 5];
+const SCALES = [1, 2, 3, 4, 5];
+if (!SCALES.includes(save.scale)) save.scale = 1;
 const scaled = (n) => n * save.scale;
 const persist = () => { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch { /* 저장 불가 환경 */ } };
 
@@ -268,7 +268,7 @@ function addReg(d, side, isGeneral = false) {
   const face = side ? (G.b.enemy.face ?? Math.PI) : (G.b.player.face || 0);
   const r = {
     id: G.regId++, side, tk: d.type, type: t, name: d.name || t.name, units: [], init: count, alive: count,
-    morale: 100, routing: false, lt: !!d.lt, wait: d.wait || 0, formation: d.formation || 'rect',
+    morale: 100, routing: false, lt: !!d.lt, wait: d.wait || 0, formation: d.formation || 'free',
     home: { x: d.x, y: d.y }, face, cx: d.x, cy: d.y, ax: d.x, ay: d.y, mode: 'idle', buffT: 0,
     isGeneral, dead: false, target: null, el: null,
     num: side === 0 ? G.regs.filter((x) => x.side === 0).length + 1 : 0,
@@ -473,7 +473,7 @@ function strike(u, e, mul = 1) {
   if (e.reg && !e.reg.routing) {
     // 상대가 바라보는 방향의 뒤쪽·옆에서 칠수록 피해가 커진다
     const off = Math.abs(angDiff(e.face, Math.atan2(u.y - e.y, u.x - e.x)));
-    if (off > 2.2) dmg *= 1.5; else if (off > 1.3) dmg *= 1.2;
+    if (off > 2.2) dmg *= 1.5; else if (off > 1.3) dmg *= 1.25;
   }
   const charging = t.cav && u.mom > t.speed * 0.6;
   if (charging) { dmg *= 2.2; if (e.tk === 'spear') hurt(u, 14, e); }
@@ -501,10 +501,10 @@ function hurt(t, amt, src, kx = 0, ky = 0) {
   const fx = FORM_FX[t.reg.formation];
   m *= fx.def;
   if (fx.rng && src && src.type && src.type.ranged) m *= fx.rng;
-  // 고수 명령으로 진지를 지키는 부대는 받는 피해가 줄어든다
-  if (t.reg.order.k === 'hold' && !t.reg.routing) m *= 0.8;
+  // 플레이어가 고수 명령을 내려 진지를 지키는 부대는 받는 피해가 줄어든다 (처음 배치에는 적용되지 않는다)
+  if (t.reg.order.dug && !t.reg.routing) m *= 0.7;
   if (t.reg.routing) m *= 1.5;
-  if (tAt(G.T, t.x, t.y) === T_HILL && !(src && tAt(G.T, src.x, src.y) === T_HILL)) m *= 0.8;
+  if (tAt(G.T, t.x, t.y) === T_HILL && !(src && tAt(G.T, src.x, src.y) === T_HILL)) m *= 0.7;
   t.hp -= amt * m; t.flash = 0.1; t.kbx += kx; t.kby += ky;
   if (src === G.hero) { G.hero.mu = Math.min(100, G.hero.mu + 0.3); G.comboT = 2.5; }
   if (t.hp <= 0) kill(t, src);
@@ -720,7 +720,7 @@ function issue(k) {
   const fx = Math.cos(face), fy = Math.sin(face), rx = -fy, ry = fx, n = regs.length;
   regs.forEach((r, i) => {
     const lat = (i - (n - 1) / 2) * 120, back = r.type.ranged ? -70 : 0;
-    r.order = { k: kind, x: m.x + rx * lat + fx * back, y: m.y + ry * lat + fy * back, face };
+    r.order = { k: kind, x: m.x + rx * lat + fx * back, y: m.y + ry * lat + fy * back, face, dug: kind === 'hold' };
   });
   G.markers.push({ x: m.x, y: m.y, t: 0, dur: 1.2, c: '#ffd23a' });
   banner(kind === 'hold' ? '그 자리를 사수하라!' : '지정 위치로 진군!', 'order');
